@@ -1,0 +1,4 @@
+name = XLMS Quiz
+package = XLMS
+description = Extensions for quiz module to support simulator driven quizes.
+core = 7.x

@@ -1,0 +1,173 @@
+<?php
+
+/**
+ * Implements hook_form_alter().
+ */
+function xlms_quiz_form_alter(&$form, &$form_state, $form_id) {
+
+}
+
+/**
+ * Implements hook_menu().
+ */
+function xlms_quiz_menu() {
+
+  $items ['lms/return'] = array(
+    'title' => 'Return URL for lms',
+    'page callback' => 'xlms_quiz_quiz_simulator_finished',
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+  $items ['lms/cleanup'] = array(
+    'title' => 'Cleanup URL for lms',
+    'page callback' => 'xlms_quiz_quiz_cleanup',
+    'type' => MENU_CALLBACK,
+  );
+
+  return $items;
+}
+
+/**
+ * @TODO:
+ *  - Init a result record
+ *  - Store the result answer. This gets stored in two places, in the
+ *    question type specific table and in a global quiz_node_results_answers table.
+ * @param $quiz
+ */
+function xlms_quiz_quiz_take_alter(&$quiz) {
+  global $user;
+  $quiz_type = field_get_items('node', $quiz, 'quiz_type');
+  if ($quiz_type[0]['value'] == 'simulator') {
+    // Get all questions for quiz
+    $questions = quiz_build_question_list($quiz);
+
+    // Get the quiz session from $_SESSION
+    // Only, the session isn't active for some reason? Guess we need to start it ourselves.
+    if (!($rid = _quiz_active_result_id($user->uid, $quiz->nid, $quiz->vid))) {
+      _quiz_take_quiz_init($quiz);
+      $rid = _quiz_active_result_id($user->uid, $quiz->nid, $quiz->vid);
+    }
+
+    $types = _quiz_get_question_types();
+    $config = array();
+    foreach ($questions as $question) {
+      $question = node_load($question['nid']);
+      if ($question->type == 'simulator_question') {
+        $question_class = $types[$question->type]['question provider'];
+        // Check for existing responses for this session to prevent fatal error.
+        $QuestionClass = new $question_class($question);
+        $config[] = $QuestionClass->getSimulationConfig();
+      }
+    }
+    $config_json = drupal_json_encode($config);
+
+    /**
+     * Simulator launch sequence
+     *  - Establish session / session id
+     *  - "click" URL for Chrome app with session id as slug
+     *  - Chrome app does a get request to REST endpoint to get additional config
+     */
+    // Initiate simulator launch
+    // * Build launch config from simulator questions
+    // * Instantiate whatever extra session keys we need?
+    // * Trigger launch JS?
+
+    // Redirect to lesson start page with status message set
+    drupal_set_message('<div style="margin-left: 20px"><h1 style="margin: 0 5px;">Launching ' . $quiz->title . '.</h1> <br>After you\'ve completed the simulation your results will be scored by the simulator and your instructor.</div>');
+    drupal_goto('node/' . $quiz->nid);
+  }
+}
+
+function xlms_quiz_quiz_simulator_config($session_id) {
+  // Get result id for this session
+  // Load quiz for result/session
+  // Get questions for quiz
+  // Load configuration parameters for simulator questions
+  // return json
+}
+
+function xlms_quiz_quiz_simulator_finished($session_id) {
+  // Testing details...
+  global $user;
+
+  /**
+   * @TODO: get the right quiz based on the session we're working with.
+   */
+  $quiz = node_load(10);
+  $rid = _quiz_active_result_id($user->uid, $quiz->nid, $quiz->vid);
+  $session_data = $_SESSION['quiz_' . $quiz->nid];
+  dpm($session_data);
+  dpm($rid);
+  dpm($_SESSION);
+
+  // Get questions for quiz
+  $questions = quiz_build_question_list($quiz);
+  $types = _quiz_get_question_types();
+
+  // Iterate over questions and set results.
+  foreach ($questions as $key => $question) {
+    $question = node_load($question['nid']);
+    $response_class = $types[$question->type]['response provider'];
+    // Check for existing responses for this session to prevent fatal error.
+    $QuestionResponse = new $response_class($rid, $question);
+    $answer = $QuestionResponse->getResponse();
+    if (!isset($answer)) {
+      if ($question->type == 'assessment_question') {
+        $QuestionResponse->save();
+      }
+      elseif ($question->type == 'simulator_question') {
+        // Fetch result from returned data
+        // Set answer
+        //  $QuestionResponse->answer = "0";
+        $QuestionResponse->save();
+      }
+      else {
+
+      }
+      $module = $types[$question->type]['module'];
+      $result = module_invoke($module, 'evaluate_question', $question, $rid);
+      $options = array();
+      $options['question_data']['number'] = $key;
+      // Set the result id for the question
+      $question->rid = $rid;
+      quiz_store_question_result($quiz, $question, $options);
+    }
+  }
+
+  // Placeholder to hit when the simulator returns.
+  // - call quiz_quiz_finished()
+  // - close result session, answers, etc.
+  // - update answers for results returned from simulator
+  // quiz_store_question_result($quiz, $question);
+  // - set time stamp for completion
+  // score quiz
+  $questions = _quiz_get_answers($quiz, $rid);
+  $score = quiz_end_scoring($quiz, $rid);
+  if ($score['is_evaluated']) {
+    _quiz_maintain_results($quiz, $rid);
+  }
+  $score = quiz_end_actions($quiz, $score, $session_data);
+  unset($_SESSION['quiz_' . $quiz->nid]);
+  return "closed";
+}
+
+function xlms_quiz_quiz_cleanup() {
+  // clean out current session.
+  $rid = $_SESSION['quiz_10']['result_id'];
+  unset($_SESSION['quiz_10']);
+  db_query("delete from quiz_assessment_user_answers where result_id = %rid", array('rid' => $rid));
+  db_query("delete from quiz_node_results_answers where result_id = %rid", array('rid' => $rid));
+
+}
+
+/**
+ * Implements hook_theme_registry_alter().
+ */
+function xlms_quiz_theme_registry_alter(&$theme_registry) {
+  if (isset($theme_registry['quiz_report_form'])) {
+    $module_path = drupal_get_path('module', 'xlms_quiz');
+    $theme_registry['quiz_report_form']['theme path'] = $module_path;
+    $theme_registry['quiz_report_form']['path'] = $module_path;
+    $theme_registry['quiz_report_form']['template'] = 'quiz-report-form';
+  }
+}

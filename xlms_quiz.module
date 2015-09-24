@@ -1,20 +1,16 @@
 <?php
 
 /**
- * Implements hook_form_alter().
- */
-function xlms_quiz_form_alter(&$form, &$form_state, $form_id) {
-
-}
-
-/**
  * Implements hook_menu().
  */
 function xlms_quiz_menu() {
-
+  /**
+   * These callbacks are largely for testing.
+   */
   $items ['lms/return'] = array(
     'title' => 'Return URL for lms',
     'page callback' => 'xlms_quiz_quiz_simulator_finished',
+    'page arguments' => array('result_id'),
     'access callback' => TRUE,
     'type' => MENU_CALLBACK,
   );
@@ -36,69 +32,95 @@ function xlms_quiz_menu() {
  */
 function xlms_quiz_quiz_take_alter(&$quiz) {
   global $user;
+
+  // For simulator driven quizes, we'll intercept normal behavior.
   $quiz_type = field_get_items('node', $quiz, 'quiz_type');
   if ($quiz_type[0]['value'] == 'simulator') {
     // Get all questions for quiz
     $questions = quiz_build_question_list($quiz);
 
-    // Get the quiz session from $_SESSION
-    // Only, the session isn't active for some reason? Guess we need to start it ourselves.
+    // Get or init the quiz session from $_SESSION
     if (!($rid = _quiz_active_result_id($user->uid, $quiz->nid, $quiz->vid))) {
+      // If there is no active quiz result for the user's session, we'll start one.
       _quiz_take_quiz_init($quiz);
       $rid = _quiz_active_result_id($user->uid, $quiz->nid, $quiz->vid);
     }
 
-    $types = _quiz_get_question_types();
-    $config = array();
-    foreach ($questions as $question) {
-      $question = node_load($question['nid']);
-      if ($question->type == 'simulator_question') {
-        $question_class = $types[$question->type]['question provider'];
-        // Check for existing responses for this session to prevent fatal error.
-        $QuestionClass = new $question_class($question);
-        $config[] = $QuestionClass->getSimulationConfig();
-      }
-    }
-    $config_json = drupal_json_encode($config);
-
-    /**
-     * Simulator launch sequence
-     *  - Establish session / session id
-     *  - "click" URL for Chrome app with session id as slug
-     *  - Chrome app does a get request to REST endpoint to get additional config
-     */
-    // Initiate simulator launch
-    // * Build launch config from simulator questions
-    // * Instantiate whatever extra session keys we need?
-    // * Trigger launch JS?
+    // Call function from xlms_session to handle Chrome app launch
+    $redirect = array(
+      'message' => t('<div style="margin-left: 2em"><h1 style="margin: 0 5px;">Launching' . $quiz->title .'</h1><br>After you\'ve completed the simulation your results will be scored by the simulator and your instructor.</div>'),
+      'url' => 'node/' . $quiz->nid,
+    );
+    // xlms_session_launch($redirect);
 
     // Redirect to lesson start page with status message set
+    // @TODO Make the redirection text configurable?
     drupal_set_message('<div style="margin-left: 20px"><h1 style="margin: 0 5px;">Launching ' . $quiz->title . '.</h1> <br>After you\'ve completed the simulation your results will be scored by the simulator and your instructor.</div>');
     drupal_goto('node/' . $quiz->nid);
   }
 }
 
-function xlms_quiz_quiz_simulator_config($session_id) {
-  // Get result id for this session
-  // Load quiz for result/session
-  // Get questions for quiz
-  // Load configuration parameters for simulator questions
-  // return json
+function xlms_quiz_get_result($result_id) {
+  $result = db_select('quiz_node_results', 'qnr')
+            ->condition('result_id', $result_id)
+            ->fields('qnr');
+  $return = $result->execute();
+  $return = $return->fetchObject();
+
+  return $return;
 }
 
-function xlms_quiz_quiz_simulator_finished($session_id) {
-  // Testing details...
-  global $user;
+/**
+ * Return config in json format for simulator questions in the requested quiz session.
+ *
+ * @param $session
+ * @return string
+ */
+function xlms_quiz_quiz_simulator_config($session) {
+  // Get result id for this session
+  $result = xlms_quiz_get_result($session->result_id);
 
-  /**
-   * @TODO: get the right quiz based on the session we're working with.
-   */
-  $quiz = node_load(10);
-  $rid = _quiz_active_result_id($user->uid, $quiz->nid, $quiz->vid);
-  $session_data = $_SESSION['quiz_' . $quiz->nid];
-  dpm($session_data);
-  dpm($rid);
-  dpm($_SESSION);
+  // Load quiz for result/session
+  $quiz = node_load($result->nid, $result->vid);
+  // Get questions for quiz
+  $questions = quiz_build_question_list($quiz);
+  $types = _quiz_get_question_types();
+  $config = array();
+
+  foreach ($questions as $question) {
+    $question = node_load($question['nid']);
+    // Load configuration parameters for simulator questions
+    if ($question->type == 'simulator_question') {
+      $question_class = $types[$question->type]['question provider'];
+      // Check for existing responses for this session to prevent fatal error.
+      $QuestionClass = new $question_class($question);
+      $config[] = $QuestionClass->getSimulationConfig();
+    }
+  }
+
+  // return json
+  $config_json = drupal_json_encode($config);
+  return $config_json;
+}
+
+function xlms_quiz_quiz_simulator_finished($session = NULL) {
+  // If $result_id isn't set, we'll try to get it from $session
+  if (is_object($session) && isset($session->result_id)) {
+    $result_id = $session->result_id;
+  }
+  elseif (!is_null($session)) {
+    $result_id = $session;
+  }
+  else {
+    drupal_set_message(t('Failed to get result id'));
+    drupal_goto('/');
+    return;
+  }
+  $session_data = array('result_id' => $result_id);
+
+  $result = xlms_quiz_get_result($result_id);
+  $user = user_load($result->uid);
+  $quiz = node_load($result->nid);
 
   // Get questions for quiz
   $questions = quiz_build_question_list($quiz);
@@ -109,7 +131,7 @@ function xlms_quiz_quiz_simulator_finished($session_id) {
     $question = node_load($question['nid']);
     $response_class = $types[$question->type]['response provider'];
     // Check for existing responses for this session to prevent fatal error.
-    $QuestionResponse = new $response_class($rid, $question);
+    $QuestionResponse = new $response_class($result_id, $question);
     $answer = $QuestionResponse->getResponse();
     if (!isset($answer)) {
       if ($question->type == 'assessment_question') {
@@ -125,11 +147,11 @@ function xlms_quiz_quiz_simulator_finished($session_id) {
 
       }
       $module = $types[$question->type]['module'];
-      $result = module_invoke($module, 'evaluate_question', $question, $rid);
+      $invoke_result = module_invoke($module, 'evaluate_question', $question, $result_id);
       $options = array();
       $options['question_data']['number'] = $key;
       // Set the result id for the question
-      $question->rid = $rid;
+      $question->rid = $result_id;
       quiz_store_question_result($quiz, $question, $options);
     }
   }
@@ -141,13 +163,14 @@ function xlms_quiz_quiz_simulator_finished($session_id) {
   // quiz_store_question_result($quiz, $question);
   // - set time stamp for completion
   // score quiz
-  $questions = _quiz_get_answers($quiz, $rid);
-  $score = quiz_end_scoring($quiz, $rid);
+  $questions = _quiz_get_answers($quiz, $result_id);
+  $score = quiz_end_scoring($quiz, $result_id);
   if ($score['is_evaluated']) {
-    _quiz_maintain_results($quiz, $rid);
+    _quiz_maintain_results($quiz, $result_id);
   }
   $score = quiz_end_actions($quiz, $score, $session_data);
-  unset($_SESSION['quiz_' . $quiz->nid]);
+  //@TODO Not sure what to do about this.
+  //unset($_SESSION['quiz_' . $quiz->nid]);
   return "closed";
 }
 

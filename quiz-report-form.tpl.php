@@ -16,7 +16,6 @@
  * $form[x]['#is_correct'] - If the users response is correct(boolean)
  * $form[x]['#is_evaluated'] - If the users response has been evaluated(boolean)
  */
-dpm(get_defined_vars());
 // $td_classes = array('quiz-report-odd-td', 'quiz-report-even-td');
 // $td_class_i = 0;
 $p = drupal_get_path('module', 'quiz') .'/theme/';

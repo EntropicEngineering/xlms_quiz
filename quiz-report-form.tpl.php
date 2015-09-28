@@ -50,8 +50,7 @@ foreach ($form as $key => $sub_form):
         <?php endif; ?>
       </span>
     </div>
-	  <p class="quiz-report-question"><strong><?php print t('Question')?>: </strong></p>
-	  <?php print drupal_render($sub_form['question']);?>
+	  <?php //print drupal_render($sub_form['question']);?>
 	</div>
   <?php if (!isset($sub_form['response']['#no-response'])): ?>
   <div class="dd">

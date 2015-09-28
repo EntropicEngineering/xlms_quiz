@@ -131,7 +131,6 @@ function xlms_quiz_quiz_simulator_finished($session = NULL) {
     $question = node_load($question['nid']);
     $response_class = $types[$question->type]['response provider'];
     // Check for existing responses for this session to prevent fatal error.
-    module_load_include('inc', 'quiz_question', 'quiz_question.core');
     $QuestionResponse = new $response_class($result_id, $question);
     $answer = $QuestionResponse->getResponse();
     if (!isset($answer)) {

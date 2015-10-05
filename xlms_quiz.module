@@ -9,14 +9,9 @@ function xlms_quiz_menu() {
    */
   $items ['lms/return'] = array(
     'title' => 'Return URL for lms',
-    'page callback' => 'xlms_quiz_quiz_simulator_finished',
+    'page callback' => 'xlms_quiz_simulator_finished',
     'page arguments' => array(2),
     'access callback' => TRUE,
-    'type' => MENU_CALLBACK,
-  );
-  $items ['lms/cleanup'] = array(
-    'title' => 'Cleanup URL for lms',
-    'page callback' => 'xlms_quiz_quiz_cleanup',
     'type' => MENU_CALLBACK,
   );
 
@@ -46,17 +41,27 @@ function xlms_quiz_quiz_take_alter(&$quiz) {
       $rid = _quiz_active_result_id($user->uid, $quiz->nid, $quiz->vid);
     }
 
+    // Initialize session with xlms_session.module
+    $xlms_session = xlms_session_initialize($rid);
+
+    // Build a link to launch the chrome app.
+    $chrome_link = l(t('Launch'), $xlms_session->url, array('attributes' => array('id' => 'chrome-launch'), 'query' => $xlms_session->url_query));
+
     // Call function from xlms_session to handle Chrome app launch
+    $click_js = 'document.getElementById("chrome-launch").click();';
+
     $redirect = array(
-      'message' => t('<div style="margin-left: 2em"><h1 style="margin: 0 5px;">Launching' . $quiz->title .'</h1><br>After you\'ve completed the simulation your results will be scored by the simulator and your instructor.</div>'),
-      'url' => 'node/' . $quiz->nid,
+        'message' => t('<div style="margin-left: 2em"><h1 style="margin: 0 5px;">Launching' . $quiz->title
+                      .'</h1><br>After you\'ve completed the simulation your results will be scored by the simulator and your instructor.'
+                      .'<br>' . $chrome_link . '</div>'
+                      .'<script>' . $click_js . '</script>'),
+        'url' => 'node/' . $quiz->nid,
     );
-    // xlms_session_launch($redirect);
 
     // Redirect to lesson start page with status message set
     // @TODO Make the redirection text configurable?
-    drupal_set_message('<div style="margin-left: 20px"><h1 style="margin: 0 5px;">Launching ' . $quiz->title . '.</h1> <br>After you\'ve completed the simulation your results will be scored by the simulator and your instructor.</div>');
-    drupal_goto('node/' . $quiz->nid);
+    drupal_set_message($redirect['message']);
+    drupal_goto($redirect['url']);
   }
 }
 
@@ -103,13 +108,17 @@ function xlms_quiz_quiz_simulator_config($session) {
   return $config_json;
 }
 
-function xlms_quiz_quiz_simulator_finished($session = NULL) {
+function xlms_quiz_simulator_finished($session = NULL) {
   // If $result_id isn't set, we'll try to get it from $session
-  if (is_object($session) && isset($session->result_id)) {
-    $result_id = $session->result_id;
+  // @TODO: Refactor to use $XlmsSession->quizResult()
+  if (is_object($session)) {
+    $result = $session->quizResult();
+    $result_id = $result->result_id;
   }
   elseif (!is_null($session)) {
-    $result_id = $session;
+    $session = new XlmsSession($session);
+    $result = $session->quizResult();
+    $result_id = $result->result_id;
   }
   else {
     drupal_set_message(t('Failed to get result id'));
@@ -141,7 +150,24 @@ function xlms_quiz_quiz_simulator_finished($session = NULL) {
         // Fetch result from returned data
         // Set answer
         //  $QuestionResponse->answer = "0";
+        $max_score = $QuestionResponse->getMaxScore();
+        if ($session->success) {
+          $score = $max_score;
+        }
+        else {
+          $score = 0;
+        }
         $QuestionResponse->save();
+        $result = simulator_question_score_an_answer(array(
+            'quiz' => $quiz,
+            'nid' => $question->nid,
+            'vid' => $question->vid,
+            'rid' => $result_id,
+            'score' => $score,
+            'max_score' => $max_score,
+            'is_correct' => $session->success,
+            'answer_feedback' => '',
+        ));
       }
       else {
 
@@ -174,15 +200,6 @@ function xlms_quiz_quiz_simulator_finished($session = NULL) {
   return "closed";
 }
 
-function xlms_quiz_quiz_cleanup() {
-  // clean out current session.
-  $rid = $_SESSION['quiz_10']['result_id'];
-  unset($_SESSION['quiz_10']);
-  db_query("delete from quiz_assessment_user_answers where result_id = %rid", array('rid' => $rid));
-  db_query("delete from quiz_node_results_answers where result_id = %rid", array('rid' => $rid));
-
-}
-
 /**
  * Implements hook_theme_registry_alter().
  */
@@ -193,4 +210,9 @@ function xlms_quiz_theme_registry_alter(&$theme_registry) {
     $theme_registry['quiz_report_form']['path'] = $module_path;
     $theme_registry['quiz_report_form']['template'] = 'quiz-report-form';
   }
+}
+
+function xlms_quiz_xlms_session_update($xlms_session) {
+  // A session is being written. Intercept and score quiz.
+  xlms_quiz_simulator_finished($xlms_session);
 }

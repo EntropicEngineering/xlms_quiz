@@ -217,6 +217,6 @@ function xlms_quiz_xlms_session_update($xlms_session) {
   xlms_quiz_simulator_finished($xlms_session);
 }
 
-function xlms_quiz_xlms_session_load(&$xlms_session) {
-  xlms_quiz_quiz_simulator_config($xlms_session);
+function xlms_quiz_xlms_session_load_alter(&$xlms_session) {
+  return xlms_quiz_quiz_simulator_config($xlms_session);
 }

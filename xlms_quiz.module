@@ -45,7 +45,7 @@ function xlms_quiz_quiz_take_alter(&$quiz) {
     $xlms_session = xlms_session_initialize($rid);
 
     // Build a link to launch the chrome app.
-    $chrome_link = l(t('Launch'), $xlms_session->url, array('attributes' => array('id' => 'chrome-launch'), 'query' => $xlms_session->url_query));
+    $chrome_link = l(t('Launch'), $xlms_session->chromeUrl(), array('attributes' => array('id' => 'chrome-launch'), 'query' => $xlms_session->chromeUrlQuery()));
 
     // Call function from xlms_session to handle Chrome app launch
     $click_js = 'document.getElementById("chrome-launch").click();';
@@ -81,7 +81,7 @@ function xlms_quiz_get_result($result_id) {
  * @param $session
  * @return string
  */
-function xlms_quiz_quiz_simulator_config($session) {
+function xlms_quiz_quiz_simulator_config(&$session) {
   // Get result id for this session
   $result = xlms_quiz_get_result($session->result_id);
 
@@ -104,8 +104,8 @@ function xlms_quiz_quiz_simulator_config($session) {
   }
 
   // return json
-  $config_json = drupal_json_encode($config);
-  return $config_json;
+  $session->config = $config; 
+  return $session;
 }
 
 function xlms_quiz_simulator_finished($session = NULL) {
@@ -215,4 +215,8 @@ function xlms_quiz_theme_registry_alter(&$theme_registry) {
 function xlms_quiz_xlms_session_update($xlms_session) {
   // A session is being written. Intercept and score quiz.
   xlms_quiz_simulator_finished($xlms_session);
+}
+
+function xlms_quiz_xlms_session_load(&$xlms_session) {
+  xlms_quiz_quiz_simulator_config($xlms_session);
 }

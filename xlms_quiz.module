@@ -83,7 +83,8 @@ function xlms_quiz_get_result($result_id) {
  */
 function xlms_quiz_quiz_simulator_config(&$session) {
   // Get result id for this session
-  $result = xlms_quiz_get_result($session->result_id);
+  $result = $session->quizResult();
+  $result_id = $result->result_id;
 
   // Load quiz for result/session
   $quiz = node_load($result->nid, $result->vid);

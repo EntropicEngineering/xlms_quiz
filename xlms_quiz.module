@@ -85,9 +85,11 @@ function xlms_quiz_quiz_simulator_config(&$session) {
   // Get result id for this session
   if (isset($session) && is_object($session)) {
     $result = $session->quizResult();
-    $result_id = $result->result_id;
+    $result_id = (is_object($result) ? $result->result_id : NULL);
   }
-  else {
+
+  // If there's no result present, terminate processing.
+  if (!isset($result_id)) {
     return;
   }
 

@@ -152,6 +152,8 @@ function xlms_quiz_simulator_finished($session = NULL) {
     $answer = $QuestionResponse->getResponse();
     if (!isset($answer)) {
       if ($question->type == 'assessment_question') {
+        $question->is_correct = TRUE;
+        $question->is_doubtful = FALSE;
         $QuestionResponse->save();
       }
       elseif ($question->type == 'simulator_question') {
@@ -165,6 +167,8 @@ function xlms_quiz_simulator_finished($session = NULL) {
         else {
           $score = 0;
         }
+        $question->is_correct = $session->success;
+        $question->is_doubtful = FALSE;
         $QuestionResponse->save();
         $result = simulator_question_score_an_answer(array(
             'quiz' => $quiz,

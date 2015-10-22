@@ -45,13 +45,13 @@ function xlms_quiz_quiz_take_alter(&$quiz) {
     $xlms_session = xlms_session_initialize($rid);
 
     // Build a link to launch the chrome app.
-    $chrome_link = l(t('Launch'), $xlms_session->chromeUrl(), array('attributes' => array('id' => 'chrome-launch'), 'query' => $xlms_session->chromeUrlQuery()));
+    $chrome_link = l(t(''), $xlms_session->chromeUrl(), array('attributes' => array('id' => 'chrome-launch'), 'query' => $xlms_session->chromeUrlQuery()));
 
     // Call function from xlms_session to handle Chrome app launch
     $click_js = 'document.getElementById("chrome-launch").click();';
 
     $redirect = array(
-        'message' => t('<div style="margin-left: 2em"><h1 style="margin: 0 5px;">Launching' . $quiz->title
+        'message' => t('<div style="margin-left: 2em"><h1 style="margin: 0 5px;">Launching ' . $quiz->title
                       .'</h1><br>After you\'ve completed the simulation your results will be scored by the simulator and your instructor.'
                       .'<br>' . $chrome_link . '</div>'
                       .'<script>' . $click_js . '</script>'),

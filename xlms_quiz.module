@@ -167,15 +167,17 @@ function xlms_quiz_simulator_finished($session = NULL) {
         else {
           $score = 0;
         }
+        watchdog('warning', print_r($score,1));
         $question->is_correct = $session->success;
         $question->is_doubtful = FALSE;
+        $question->score = $score;
         $QuestionResponse->save();
         $result = simulator_question_score_an_answer(array(
             'quiz' => $quiz,
             'nid' => $question->nid,
             'vid' => $question->vid,
             'rid' => $result_id,
-            'score' => $score,
+            'score' => (int) $score,
             'max_score' => $max_score,
             'is_correct' => $session->success,
             'answer_feedback' => '',

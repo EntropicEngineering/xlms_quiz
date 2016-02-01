@@ -107,12 +107,12 @@ function xlms_quiz_quiz_simulator_config(&$session) {
       $question_class = $types[$question->type]['question provider'];
       // Check for existing responses for this session to prevent fatal error.
       $QuestionClass = new $question_class($question);
-      $config[] = $QuestionClass->getSimulationConfig();
+      $QuestionClass->getSimulationConfig($session);
     }
   }
 
   // return json
-  $session->config = $config; 
+  //$session->config = $config;
   return $session;
 }
 

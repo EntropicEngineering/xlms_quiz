@@ -48,20 +48,20 @@ function xlms_quiz_quiz_take_alter(&$quiz) {
     $chrome_link = l(t(''), $xlms_session->chromeUrl(), array('attributes' => array('id' => 'chrome-launch'), 'query' => $xlms_session->chromeUrlQuery()));
 
     // Call function from xlms_session to handle Chrome app launch
-    $click_js = 'document.getElementById("chrome-launch").click();';
+    $click_js = 'window.setTimeout(document.getElementById("chrome-launch").click(), 5); window.location.href = "/node/'. $quiz->nid .'";';
 
     $redirect = array(
         'message' => t('<div style="margin-left: 2em"><h1 style="margin: 0 5px;">Launching ' . $quiz->title
                       .'</h1><br>After you\'ve completed the simulation your results will be scored by the simulator and your instructor.'
                       .'<br>' . $chrome_link . '</div>'
-                      .'<script>' . $click_js . '</script>'),
+                      .'<script>' . $click_js . '</script><script>window.location.href(/'. $redirect['url'] . ')</script>'),
         'url' => 'node/' . $quiz->nid,
     );
 
     // Redirect to lesson start page with status message set
     // @TODO Make the redirection text configurable?
     drupal_set_message($redirect['message']);
-    drupal_goto($redirect['url']);
+    //drupal_goto($redirect['url']);
   }
 }
 
@@ -161,14 +161,18 @@ function xlms_quiz_simulator_finished($session = NULL) {
         // Set answer
         //  $QuestionResponse->answer = "0";
         $max_score = $QuestionResponse->getMaxScore();
+        /*
         if ($session->success) {
-          $score = $max_score;
+          // $score = $max_score;
+          $score = $session->success;
         }
         else {
           $score = 0;
         }
-        watchdog('warning', print_r($score,1));
-        $question->is_correct = $session->success;
+        */
+        $score = $session->success * 10;
+        
+        $question->is_correct = TRUE; //$session->success;
         $question->is_doubtful = FALSE;
         $question->score = $score;
         $QuestionResponse->save();
@@ -177,9 +181,9 @@ function xlms_quiz_simulator_finished($session = NULL) {
             'nid' => $question->nid,
             'vid' => $question->vid,
             'rid' => $result_id,
-            'score' => (int) $score,
+            'score' => $score,
             'max_score' => $max_score,
-            'is_correct' => $session->success,
+            'is_correct' => $question->is_correct,
             'answer_feedback' => '',
         ));
       }
